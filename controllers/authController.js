@@ -4,77 +4,94 @@ const jwt  = require('jsonwebtoken');
 const User =require('./../models/user');
 
 router.post('/signup', async (req, res) => {
-    try{
-
-        const user  = await User.findOne({email: req.body.email});
-
-
-        if(user){
+    try {
+        // Validate required fields
+        const { firstname, lastname, email, password } = req.body;
+        if (!firstname || !lastname || !email || !password) {
             return res.status(400).send({
-                message: 'user already exists.',
-                success:false
-            })
+                message: 'All fields are required.',
+                success: false,
+            });
         }
 
-        const hashedPassword   = await bcrypt.hash(req.body.password, 10);
-        req.body.password  =  hashedPassword;
+        // Check if the user already exists
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).send({
+                message: 'User already exists.',
+                success: false,
+            });
+        }
 
-        const newUser = new User(req.body);
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Create and save the new user
+        const newUser = new User({
+            firstname,
+            lastname,
+            email,
+            password: hashedPassword,
+        });
         await newUser.save();
 
         res.status(201).send({
-            message: 'User created sucessfully!',
-            success:true
+            message: 'User created successfully!',
+            success: true,
         });
-
-
-    }catch(error){
-        res.send({
-            message: error.message,
-            success: false
-
+    } catch (error) {
+        res.status(500).send({
+            message: 'An error occurred during signup.',
+            success: false,
+            error: error.message,
         });
-
-
     }
 });
 
-router.post('/login', async(req,res) =>{
-    try{
-        // check if user exists
-        const user = await User.findOne({email:req.body.email});
-        if(!User){
-            return res.status(400).send({
-                message: 'User does not exits',
-                success:false
-            })
+router.post('/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
 
-        }
-        // check if the password is correct or  not
-        const isvalid = await bcrypt.compare(req.body.password,user.password);
-        if(!isvalid){
+        // Validate required fields
+        if (!email || !password) {
             return res.status(400).send({
-                message: 'invaild password',
-                success: false
-            })
+                message: 'Email and password are required.',
+                success: false,
+            });
         }
 
-        //if user is exists & password is correct 
-        const token = jwt.sign({userId:user._id},process.env.SECRET_KEY,  {expiresIn: "1d"});
-        res.send({
-            message: 'user logged-in sucessfully!',
-            success:true,
-            token:token
+        // Check if user exists
+        const user = await User.findOne({ email }).select('+password');
+        if (!user) {
+            return res.status(400).send({
+                message: 'User does not exist.',
+                success: false,
+            });
+        }
+
+        // Check if the password is correct
+        const isValid = await bcrypt.compare(password, user.password);
+        if (!isValid) {
+            return res.status(400).send({
+                message: 'Invalid password.',
+                success: false,
+            });
+        }
+
+        // Generate a JWT token
+        const token = jwt.sign({ userId: user._id }, process.env.SECRET_KEY, { expiresIn: '1d' });
+
+        res.status(200).send({
+            message: 'User logged in successfully!',
+            success: true,
+            token,
         });
-
-
-        
-    }catch(error){
-        res.send({
-            message:error.message,
-            success:false
-        })
+    } catch (error) {
+        res.status(500).send({
+            message: 'An error occurred during login.',
+            success: false,
+            error: error.message,
+        });
     }
-    
 });
 module.exports  = router;
